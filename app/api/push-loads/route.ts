@@ -3,17 +3,14 @@
  * ====================
  * Called when the user clicks "Sanitize & Push".
  *
- * Flow:
- *   1. Receive raw Walmart tenders from the browser
- *   2. Sanitize each one (convert formats, trim spaces, map fields)
- *   3. POST the cleaned records to the SHV TMS API
- *   4. Return which loads were accepted/rejected + the pushed data for display
+ * Each load is pushed ONE AT A TIME to SHV, in sequential order.
+ * We never send a batch — each record waits for the previous one to finish.
  */
 
 import { NextResponse } from "next/server";
 import { authHeaders, SHV_API_URL } from "@/lib/config";
-import { sanitizeLoads } from "@/lib/sanitize";
-import type { PushResult, ShvPushResponse, WalmartLoad } from "@/lib/types";
+import { sanitizeLoad, sortLoadsSequential } from "@/lib/sanitize";
+import type { ShvLoad, ShvPushResponse, WalmartLoad } from "@/lib/types";
 
 export async function POST(request: Request) {
   try {
@@ -27,10 +24,55 @@ export async function POST(request: Request) {
       );
     }
 
-    // Step 1: Clean and convert each Walmart record → SHV format (FIFO order)
-    const { sanitized, errors: sanitizeErrors } = sanitizeLoads(rawLoads);
+    // Work through loads in sequential order (oldest ship date first)
+    const ordered = sortLoadsSequential(rawLoads);
 
-    if (sanitized.length === 0) {
+    const accepted: string[] = [];
+    const rejected: Array<{ load_number: string; errors: string[] }> = [];
+    const pushedLoads: ShvLoad[] = [];
+    const sanitizeErrors: Array<{ load_number: string; errors: string[] }> = [];
+
+    // Push each load individually — wait for one to finish before starting the next
+    for (const rawLoad of ordered) {
+      let sanitized: ShvLoad;
+
+      try {
+        sanitized = sanitizeLoad(rawLoad);
+      } catch (err) {
+        sanitizeErrors.push({
+          load_number: rawLoad.load_no || "unknown",
+          errors: [err instanceof Error ? err.message : String(err)],
+        });
+        continue;
+      }
+
+      const res = await fetch(SHV_API_URL, {
+        method: "POST",
+        headers: authHeaders(),
+        body: JSON.stringify({ load: sanitized }),
+      });
+
+      const data = (await res.json().catch(() => null)) as ShvPushResponse | null;
+
+      if (res.ok && data) {
+        if (data.accepted?.length) {
+          accepted.push(...data.accepted);
+          pushedLoads.push(sanitized);
+        }
+        if (data.rejected?.length) {
+          rejected.push(...data.rejected);
+        }
+      } else if (data?.rejected?.length) {
+        rejected.push(...data.rejected);
+      } else {
+        rejected.push({
+          load_number: sanitized.load_number,
+          errors: [data?.message ?? `SHV API returned ${res.status}`],
+        });
+      }
+    }
+
+    if (pushedLoads.length === 0 && rejected.length === 0 && sanitizeErrors.length > 0) {
       return NextResponse.json(
         {
           status: "rejected",
@@ -38,43 +80,28 @@ export async function POST(request: Request) {
           accepted: [],
           rejected: sanitizeErrors,
           pushedLoads: [],
+          sanitizeErrors,
         },
         { status: 422 }
       );
     }
 
-    // Step 2: Send the sanitized batch to SHV TMS
-    const res = await fetch(SHV_API_URL, {
-      method: "POST",
-      headers: authHeaders(),
-      body: JSON.stringify({ loads: sanitized }),
-    });
-
-    const data = (await res.json().catch(() => null)) as ShvPushResponse | null;
-
-    // Build the list of successfully pushed loads for the UI to display
-    const acceptedNumbers = new Set(data?.accepted ?? []);
-    const pushedLoads = sanitized.filter((load) =>
-      acceptedNumbers.has(load.load_number)
-    );
-
-    if (!res.ok) {
-      return NextResponse.json(
-        {
-          ...(data ?? {}),
-          sanitizeErrors,
-          pushedLoads,
-          error: data?.message ?? `SHV API returned ${res.status}`,
-        },
-        { status: res.status }
-      );
-    }
+    const allRejected = [...sanitizeErrors, ...rejected];
+    const message =
+      pushedLoads.length > 0
+        ? `${pushedLoads.length} load(s) pushed to SHV TMS in sequential order.`
+        : "No loads were accepted by SHV.";
 
     return NextResponse.json({
-      status: data?.status ?? "ok",
-      message: data?.message ?? "",
-      accepted: data?.accepted ?? [],
-      rejected: data?.rejected ?? [],
+      status:
+        allRejected.length > 0 && pushedLoads.length > 0
+          ? "partial"
+          : pushedLoads.length > 0
+            ? "ok"
+            : "rejected",
+      message,
+      accepted,
+      rejected,
       sanitizeErrors,
       pushedLoads,
     });

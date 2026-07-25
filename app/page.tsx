@@ -13,7 +13,6 @@
 import Image from "next/image";
 import { useCallback, useState } from "react";
 import type {
-  PushResult,
   ShvLoad,
   WalmartLoad,
   WalmartResponse,
@@ -76,7 +75,7 @@ export default function Home() {
       setStep(2);
       setStatus({
         type: "success",
-        message: `Fetched ${result.count ?? result.loads?.length ?? 0} open tender(s) from Walmart (oldest first).`,
+        message: `Fetched ${result.count ?? result.loads?.length ?? 0} open tender(s) in sequential order.`,
       });
     } catch (err) {
       setStatus({
@@ -88,7 +87,7 @@ export default function Home() {
     }
   }, []);
 
-  // --- Button 2: Sanitize & Push to SHV ---
+  // --- Button 2: Sanitize & Push to SHV (one record at a time, in order) ---
 
   const handlePush = useCallback(async () => {
     if (loads.length === 0) {
@@ -100,49 +99,58 @@ export default function Home() {
     }
 
     setPushing(true);
-    setStatus({
-      type: "loading",
-      message: "Sanitizing data and pushing to SHV TMS…",
-    });
     setRejected([]);
     setPushedLoads([]);
 
+    const accumulatedPushed: ShvLoad[] = [];
+    const accumulatedRejected: Array<{ load_number: string; errors: string[] }> =
+      [];
+
     try {
-      const res = await fetch("/api/push-loads", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ loads }),
-      });
+      // Push each load one at a time — same order as fetched (sequential)
+      for (let i = 0; i < loads.length; i++) {
+        setStatus({
+          type: "loading",
+          message: `Pushing load ${i + 1} of ${loads.length} to SHV…`,
+        });
 
-      const data = await res.json();
+        const res = await fetch("/api/push-loads", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ loads: [loads[i]] }),
+        });
 
-      const sanitizeErrors = data.sanitizeErrors ?? [];
-      const apiRejected = data.rejected ?? [];
+        const data = await res.json();
 
-      if (!res.ok) {
-        setRejected([...sanitizeErrors, ...apiRejected]);
-        setPushedLoads(data.pushedLoads ?? []);
-        throw new Error(
-          data.error ?? data.message ?? `Push failed (${res.status})`
-        );
+        const sanitizeErrors = data.sanitizeErrors ?? [];
+        const apiRejected = data.rejected ?? [];
+
+        if (data.pushedLoads?.length) {
+          accumulatedPushed.push(...data.pushedLoads);
+          // Show each load on screen as soon as it is pushed (exact API values)
+          setPushedLoads([...accumulatedPushed]);
+        }
+
+        if (sanitizeErrors.length || apiRejected.length) {
+          accumulatedRejected.push(...sanitizeErrors, ...apiRejected);
+          setRejected([...accumulatedRejected]);
+        }
       }
 
-      const result = data as PushResult;
-      const allRejected = [...sanitizeErrors, ...(result.rejected ?? [])];
-      setRejected(allRejected);
-      setPushedLoads(result.pushedLoads ?? []);
-
-      if (allRejected.length > 0) {
+      if (accumulatedPushed.length === 0) {
+        setStatus({
+          type: "error",
+          message: "No loads were accepted by SHV.",
+        });
+      } else if (accumulatedRejected.length > 0) {
         setStatus({
           type: "warning",
-          message: `${result.accepted?.length ?? 0} accepted, ${allRejected.length} rejected.`,
+          message: `${accumulatedPushed.length} accepted, ${accumulatedRejected.length} rejected.`,
         });
       } else {
         setStatus({
           type: "success",
-          message:
-            result.message ??
-            `${result.accepted?.length ?? 0} load(s) pushed to SHV TMS.`,
+          message: `${accumulatedPushed.length} load(s) pushed to SHV TMS in sequential order.`,
         });
       }
     } catch (err) {
@@ -210,8 +218,8 @@ export default function Home() {
       </div>
 
       <p className="hint">
-        Fetch first to see the raw tenders (oldest first), then sanitize &amp;
-        push them to the TMS.
+        Fetch first to pull tenders in sequential order, then sanitize &amp; push
+        them one at a time to the TMS.
       </p>
 
       {/* Status banner — green for success, red for error, etc. */}
@@ -262,8 +270,8 @@ export default function Home() {
                 <dd>{load.ship_date}</dd>
                 <dt>Delivery Date</dt>
                 <dd>{load.delivery_date}</dd>
-                <dt>Weight (lbs)</dt>
-                <dd>{load.weight.toLocaleString()}</dd>
+                <dt>Weight</dt>
+                <dd>{load.weight}</dd>
                 <dt>Equipment</dt>
                 <dd>{load.equipment_type}</dd>
               </dl>
@@ -276,7 +284,7 @@ export default function Home() {
       <section className="loads-section">
         <h2 className="section-title">
           {loads.length > 0
-            ? `Raw Tenders (${loads.length}) — oldest first`
+            ? `Raw Tenders (${loads.length}) — sequential order`
             : "Raw Tenders"}
         </h2>
 

@@ -10,7 +10,7 @@
 
 import { NextResponse } from "next/server";
 import { authHeaders, WALMART_API_URL } from "@/lib/config";
-import { sortLoadsFifo } from "@/lib/sanitize";
+import { sortLoadsSequential } from "@/lib/sanitize";
 import type { WalmartResponse } from "@/lib/types";
 
 export async function GET() {
@@ -35,8 +35,8 @@ export async function GET() {
 
     const result = data as WalmartResponse;
 
-    // Sort oldest-first (FIFO) so the UI and later push follow correct order
-    result.loads = sortLoadsFifo(result.loads ?? []);
+    // Return loads in sequential order (oldest ship date first)
+    result.loads = sortLoadsSequential(result.loads ?? []);
     result.count = result.loads.length;
 
     return NextResponse.json(result);
