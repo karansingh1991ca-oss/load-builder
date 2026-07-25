@@ -9,7 +9,8 @@
 
 import { NextResponse } from "next/server";
 import { authHeaders, SHV_API_URL } from "@/lib/config";
-import { sanitizeLoad, sortLoadsSequential } from "@/lib/sanitize";
+import { sanitizeLoad } from "@/lib/sanitize";
+import { sortLoadsSequential } from "@/lib/sort";
 import type { ShvLoad, ShvPushResponse, WalmartLoad } from "@/lib/types";
 
 export async function POST(request: Request) {
@@ -24,7 +25,7 @@ export async function POST(request: Request) {
       );
     }
 
-    // Work through loads in sequential order (oldest ship date first)
+    // Work through loads in increasing load number order
     const ordered = sortLoadsSequential(rawLoads);
 
     const accepted: string[] = [];

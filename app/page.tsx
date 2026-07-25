@@ -3,54 +3,37 @@
 /**
  * PAGE.TSX — Main screen the user sees
  * =====================================
- * This is the Load Builder dashboard with two buttons:
- *   1. Fetch Loads   — pull tenders from Walmart
- *   2. Sanitize & Push — clean the data and send it to SHV
- *
- * "use client" means this code runs in the browser (handles button clicks).
+ *   1. Fetch Loads   — pull from Walmart, show sanitized SHV-format records
+ *   2. Sanitize & Push — push each load to SHV in increasing load number order
  */
 
 import Image from "next/image";
 import { useCallback, useState } from "react";
-import type {
-  ShvLoad,
-  WalmartLoad,
-  WalmartResponse,
-} from "@/lib/types";
+import { LoadCard } from "@/app/components/LoadCard";
+import type { FetchResponse, ShvLoad, WalmartLoad } from "@/lib/types";
 
-/** Status message shown in the colored banner after each action. */
 type Status = {
   type: "loading" | "success" | "error" | "warning";
   message: string;
 } | null;
 
 export default function Home() {
-  // --- State: data the screen remembers between button clicks ---
+  /** Sanitized loads shown after Fetch — same format as what gets pushed. */
+  const [fetchedLoads, setFetchedLoads] = useState<ShvLoad[]>([]);
 
-  /** Raw tender records fetched from Walmart (shown in "Raw Tenders" section). */
-  const [loads, setLoads] = useState<WalmartLoad[]>([]);
+  /** Raw Walmart records kept in load-number order for sequential push. */
+  const [rawLoads, setRawLoads] = useState<WalmartLoad[]>([]);
 
-  /** Cleaned records that were successfully pushed to SHV (shown after push). */
+  /** Loads successfully pushed to SHV (appears one-by-one during push). */
   const [pushedLoads, setPushedLoads] = useState<ShvLoad[]>([]);
 
-  /** Colored status banner message (success / error / loading). */
   const [status, setStatus] = useState<Status>(null);
-
-  /** Loads that failed validation or were rejected by SHV. */
   const [rejected, setRejected] = useState<
     Array<{ load_number: string; errors: string[] }>
   >([]);
-
-  /** True while the Fetch button is working — disables buttons & shows spinner text. */
   const [fetching, setFetching] = useState(false);
-
-  /** True while the Push button is working. */
   const [pushing, setPushing] = useState(false);
-
-  /** Tracks which step the user is on (1 = fetch, 2 = push) for the step indicator. */
   const [step, setStep] = useState<1 | 2>(1);
-
-  // --- Button 1: Fetch Loads from Walmart ---
 
   const handleFetch = useCallback(async () => {
     setFetching(true);
@@ -59,7 +42,9 @@ export default function Home() {
       message: "Fetching open tenders from Walmart portal…",
     });
     setRejected([]);
-    setPushedLoads([]); // clear previous push results on a fresh fetch
+    setPushedLoads([]);
+    setFetchedLoads([]);
+    setRawLoads([]);
 
     try {
       const res = await fetch("/api/fetch-loads");
@@ -69,13 +54,20 @@ export default function Home() {
         throw new Error(data.error ?? `Fetch failed (${res.status})`);
       }
 
-      const result = data as WalmartResponse;
-      // API already returns loads in FIFO order (oldest ship date first)
-      setLoads(result.loads ?? []);
+      const result = data as FetchResponse;
+
+      // Display sanitized SHV-format records sorted by increasing load number
+      setFetchedLoads(result.loads ?? []);
+      setRawLoads(result.rawLoads ?? []);
+
+      if (result.sanitizeErrors?.length) {
+        setRejected(result.sanitizeErrors);
+      }
+
       setStep(2);
       setStatus({
         type: "success",
-        message: `Fetched ${result.count ?? result.loads?.length ?? 0} open tender(s) in sequential order.`,
+        message: `Fetched ${result.count ?? 0} load(s) in increasing load number order.`,
       });
     } catch (err) {
       setStatus({
@@ -87,10 +79,8 @@ export default function Home() {
     }
   }, []);
 
-  // --- Button 2: Sanitize & Push to SHV (one record at a time, in order) ---
-
   const handlePush = useCallback(async () => {
-    if (loads.length === 0) {
+    if (rawLoads.length === 0) {
       setStatus({
         type: "warning",
         message: "No loads to push. Fetch loads first.",
@@ -107,27 +97,26 @@ export default function Home() {
       [];
 
     try {
-      // Push each load one at a time — same order as fetched (sequential)
-      for (let i = 0; i < loads.length; i++) {
+      // Push in increasing load number order (rawLoads already sorted from fetch)
+      for (let i = 0; i < rawLoads.length; i++) {
+        const loadNum = rawLoads[i].load_no;
         setStatus({
           type: "loading",
-          message: `Pushing load ${i + 1} of ${loads.length} to SHV…`,
+          message: `Pushing ${loadNum} (${i + 1} of ${rawLoads.length})…`,
         });
 
         const res = await fetch("/api/push-loads", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ loads: [loads[i]] }),
+          body: JSON.stringify({ loads: [rawLoads[i]] }),
         });
 
         const data = await res.json();
-
         const sanitizeErrors = data.sanitizeErrors ?? [];
         const apiRejected = data.rejected ?? [];
 
         if (data.pushedLoads?.length) {
           accumulatedPushed.push(...data.pushedLoads);
-          // Show each load on screen as soon as it is pushed (exact API values)
           setPushedLoads([...accumulatedPushed]);
         }
 
@@ -150,7 +139,7 @@ export default function Home() {
       } else {
         setStatus({
           type: "success",
-          message: `${accumulatedPushed.length} load(s) pushed to SHV TMS in sequential order.`,
+          message: `${accumulatedPushed.length} load(s) pushed in increasing load number order.`,
         });
       }
     } catch (err) {
@@ -161,13 +150,10 @@ export default function Home() {
     } finally {
       setPushing(false);
     }
-  }, [loads]);
-
-  // --- Render the page ---
+  }, [rawLoads]);
 
   return (
     <main className="app">
-      {/* SHV logo banner at the top */}
       <div className="logo-bar">
         <Image
           src="/logo.jpg"
@@ -188,7 +174,6 @@ export default function Home() {
         <p className="email">Auth: Karansingh1991.ca@gmail.com</p>
       </header>
 
-      {/* Step indicator: 1 Fetch → 2 Push */}
       <div className="steps">
         <span className={`step ${step >= 1 ? "active" : ""}`}>
           <span className="step-num">1</span> Fetch loads
@@ -199,7 +184,6 @@ export default function Home() {
         </span>
       </div>
 
-      {/* The two action buttons */}
       <div className="actions">
         <button
           className="btn-fetch"
@@ -211,23 +195,21 @@ export default function Home() {
         <button
           className="btn-push"
           onClick={handlePush}
-          disabled={fetching || pushing || loads.length === 0}
+          disabled={fetching || pushing || rawLoads.length === 0}
         >
           {pushing ? "Pushing…" : "2 · Sanitize & Push"}
         </button>
       </div>
 
       <p className="hint">
-        Fetch first to pull tenders in sequential order, then sanitize &amp; push
-        them one at a time to the TMS.
+        Loads are pulled and pushed in increasing load number order (e.g.
+        LD-3262360, then LD-3262361).
       </p>
 
-      {/* Status banner — green for success, red for error, etc. */}
       {status && (
         <div className={`status-bar ${status.type}`}>{status.message}</div>
       )}
 
-      {/* Rejected loads with error details */}
       {rejected.length > 0 && (
         <div className="rejected-list">
           <h2 className="section-title rejected-title">Rejected Loads</h2>
@@ -244,91 +226,38 @@ export default function Home() {
         </div>
       )}
 
-      {/* Successfully pushed loads — shown after Sanitize & Push */}
+      {/* Fetched loads — sanitized SHV format, shown only after Fetch */}
+      {fetchedLoads.length > 0 && (
+        <section className="loads-section">
+          <h2 className="section-title">
+            Fetched Loads ({fetchedLoads.length}) — increasing load number
+          </h2>
+          {fetchedLoads.map((load) => (
+            <LoadCard key={load.load_number} load={load} />
+          ))}
+        </section>
+      )}
+
+      {fetchedLoads.length === 0 && !fetching && (
+        <section className="loads-section">
+          <div className="empty-state">
+            No loads yet. Click &ldquo;Fetch Loads&rdquo; to pull and preview
+            sanitized records from Walmart.
+          </div>
+        </section>
+      )}
+
+      {/* Pushed loads — same card format, appears as each load is pushed */}
       {pushedLoads.length > 0 && (
         <section className="loads-section pushed-section">
           <h2 className="section-title pushed-title">
             Pushed to SHV ({pushedLoads.length})
           </h2>
           {pushedLoads.map((load) => (
-            <article key={load.load_number} className="load-card pushed-card">
-              <h3>{load.load_number}</h3>
-              <dl className="load-grid">
-                <dt>BOL Number</dt>
-                <dd>{load.bol_number}</dd>
-                <dt>Shipper</dt>
-                <dd>{load.shipper_name}</dd>
-                <dt>Origin</dt>
-                <dd>
-                  {load.origin_city}, {load.origin_state}
-                </dd>
-                <dt>Destination</dt>
-                <dd>
-                  {load.destination_city}, {load.destination_state}
-                </dd>
-                <dt>Ship Date</dt>
-                <dd>{load.ship_date}</dd>
-                <dt>Delivery Date</dt>
-                <dd>{load.delivery_date}</dd>
-                <dt>Weight</dt>
-                <dd>{load.weight}</dd>
-                <dt>Equipment</dt>
-                <dd>{load.equipment_type}</dd>
-              </dl>
-            </article>
+            <LoadCard key={load.load_number} load={load} variant="pushed" />
           ))}
         </section>
       )}
-
-      {/* Raw Walmart tenders fetched in step 1 */}
-      <section className="loads-section">
-        <h2 className="section-title">
-          {loads.length > 0
-            ? `Raw Tenders (${loads.length}) — sequential order`
-            : "Raw Tenders"}
-        </h2>
-
-        {loads.length === 0 ? (
-          <div className="empty-state">
-            No tenders loaded yet. Click &ldquo;Fetch Loads&rdquo; to pull open
-            tenders from the Walmart portal.
-          </div>
-        ) : (
-          loads.map((load) => (
-            <article key={load.load_no} className="load-card">
-              <h3>{load.load_no}</h3>
-              <dl className="load-grid">
-                <dt>Tender ID</dt>
-                <dd>{load.tender_id}</dd>
-                <dt>Freight Order</dt>
-                <dd>{load.frt_ord_no}</dd>
-                <dt>Shipper</dt>
-                <dd>{load.shipper_nm}</dd>
-                <dt>Origin</dt>
-                <dd>
-                  {load.orig_city}, {load.orig_st}
-                </dd>
-                <dt>Destination</dt>
-                <dd>
-                  {load.dest_city}, {load.dest_st}
-                </dd>
-                <dt>Ship Date</dt>
-                <dd>{load.shp_dt}</dd>
-                <dt>Delivery Date</dt>
-                <dd>{load.del_dt}</dd>
-                <dt>Weight</dt>
-                <dd>{load.wgt ?? "—"}</dd>
-                <dt>Mode</dt>
-                <dd>{load.mode.trim()}</dd>
-                <dt>Pallets / Cases</dt>
-                <dd>
-                  {load.pallet_cnt} / {load.case_cnt}
-                </dd>
-              </dl>
-            </article>
-          ))
-        )}
-      </section>
     </main>
   );
 }

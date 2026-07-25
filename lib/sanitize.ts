@@ -8,21 +8,7 @@
  */
 
 import type { SanitizeResult, ShvLoad, WalmartLoad } from "./types";
-
-/**
- * Sort loads into sequential processing order (FIFO).
- * Oldest ship date goes first — each record is pulled and pushed in this order.
- */
-export function sortLoadsSequential(loads: WalmartLoad[]): WalmartLoad[] {
-  return [...loads].sort((a, b) => {
-    const dateCompare = a.shp_dt.trim().localeCompare(b.shp_dt.trim());
-    if (dateCompare !== 0) return dateCompare;
-    return a.load_no.localeCompare(b.load_no);
-  });
-}
-
-/** @deprecated Use sortLoadsSequential — kept for clarity in older imports */
-export const sortLoadsFifo = sortLoadsSequential;
+import { sortLoadsSequential } from "./sort";
 
 /**
  * Convert a Walmart date (MMDDYYYY) into SHV format (DDMMYYYY).

@@ -242,6 +242,10 @@ button:disabled {
   color: var(--accent);
 }
 
+.load-card h3.pushed {
+  color: var(--success);
+}
+
 .load-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;

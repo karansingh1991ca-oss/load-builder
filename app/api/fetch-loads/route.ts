@@ -2,23 +2,21 @@
  * FETCH-LOADS API ROUTE
  * =====================
  * Called when the user clicks "Fetch Loads".
- * This runs on the server (not in the browser) so we can safely attach
- * the auth token without exposing it to the user's screen.
- *
- * Flow: Browser → this route → Walmart API → returns raw tenders
+ * Pulls from Walmart, sorts by load number (lowest first), sanitizes,
+ * and returns the SHV-ready records for display.
  */
 
 import { NextResponse } from "next/server";
 import { authHeaders, WALMART_API_URL } from "@/lib/config";
-import { sortLoadsSequential } from "@/lib/sanitize";
-import type { WalmartResponse } from "@/lib/types";
+import { sanitizeLoads } from "@/lib/sanitize";
+import { sortLoadsSequential } from "@/lib/sort";
+import type { FetchResponse, WalmartResponse } from "@/lib/types";
 
 export async function GET() {
   try {
-    // Call the Walmart portal with our authenticated email
     const res = await fetch(WALMART_API_URL, {
       headers: authHeaders(),
-      cache: "no-store", // always get fresh data, never use a cached copy
+      cache: "no-store",
     });
 
     const data = await res.json().catch(() => null);
@@ -35,11 +33,19 @@ export async function GET() {
 
     const result = data as WalmartResponse;
 
-    // Return loads in sequential order (oldest ship date first)
-    result.loads = sortLoadsSequential(result.loads ?? []);
-    result.count = result.loads.length;
+    // Sort by increasing load number, then sanitize for display
+    const ordered = sortLoadsSequential(result.loads ?? []);
+    const { sanitized, errors } = sanitizeLoads(ordered);
 
-    return NextResponse.json(result);
+    const response: FetchResponse = {
+      source: result.source,
+      count: sanitized.length,
+      loads: sanitized,
+      rawLoads: ordered,
+      sanitizeErrors: errors,
+    };
+
+    return NextResponse.json(response);
   } catch (err) {
     return NextResponse.json(
       { error: err instanceof Error ? err.message : "Failed to fetch loads" },
