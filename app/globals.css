@@ -173,10 +173,10 @@ button:disabled {
 }
 
 .btn-push.active {
-  background: var(--success);
+  background: var(--accent);
   color: #fff;
-  border-color: var(--success);
-  box-shadow: 0 0 0 3px rgba(34, 197, 94, 0.35);
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(0, 113, 206, 0.35);
 }
 
 /* Accordion sections */
