@@ -1,3 +1,10 @@
+/**
+ * LAYOUT.TSX — Wraps every page in the app
+ * =========================================
+ * Sets the browser tab title and loads global styles.
+ * All pages share this shell automatically.
+ */
+
 import type { Metadata } from "next";
 import "./globals.css";
 

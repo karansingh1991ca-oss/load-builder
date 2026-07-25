@@ -1,34 +1,55 @@
+/**
+ * SANITIZE.TS — Data cleaning & conversion layer
+ * ================================================
+ * Walmart and SHV use different field names and formats for the same information.
+ * This file converts each Walmart tender into the exact shape SHV expects.
+ *
+ * Think of it like translating a form from one company's layout to another's.
+ */
+
 import type { SanitizeResult, ShvLoad, WalmartLoad } from "./types";
 
-const REEFER_MODES = new Set([
-  "REEFER",
-  "REF",
-  "FROZEN",
-  "FRZ",
-  "CHILLED",
-  "CLD",
-  "TEMP CONTROL",
-  "TEMPERATURE CONTROL",
-]);
+/**
+ * Sort loads First-In-First-Out (FIFO).
+ * The oldest ship date is processed first so tenders are pushed in arrival order,
+ * not newest-first (which was causing reverse-order updates).
+ */
+export function sortLoadsFifo(loads: WalmartLoad[]): WalmartLoad[] {
+  return [...loads].sort((a, b) => {
+    // shp_dt is MMDDYYYY — string compare works for dates within the same year
+    const dateCompare = a.shp_dt.trim().localeCompare(b.shp_dt.trim());
+    if (dateCompare !== 0) return dateCompare;
+    // If ship dates tie, fall back to load number for a stable order
+    return a.load_no.localeCompare(b.load_no);
+  });
+}
 
-/** Convert MMDDYYYY (Walmart) → DDMMYYYY (SHV) */
+/**
+ * Convert a Walmart date (MMDDYYYY) into SHV format (DDMMYYYY).
+ * Example: Walmart "07152026" (July 15) → SHV "15072026" (15 July)
+ */
 export function convertDate(mmddyyyy: string): string {
   const cleaned = mmddyyyy.trim();
   if (!/^\d{8}$/.test(cleaned)) {
-    throw new Error(`Invalid date "${mmddyyyy}" — expected 8 digits in MMDDYYYY format`);
+    throw new Error(
+      `Invalid date "${mmddyyyy}" — expected 8 digits in MMDDYYYY format`
+    );
   }
-  const mm = cleaned.slice(0, 2);
-  const dd = cleaned.slice(2, 4);
-  const yyyy = cleaned.slice(4, 8);
-  return `${dd}${mm}${yyyy}`;
+  const mm = cleaned.slice(0, 2); // month
+  const dd = cleaned.slice(2, 4); // day
+  const yyyy = cleaned.slice(4, 8); // year
+  return `${dd}${mm}${yyyy}`; // SHV wants day first
 }
 
-/** Parse weight string like "41,860 lbs" → 41860 */
+/**
+ * Turn a weight string like "41,860 lbs" into a plain number: 41860.
+ * SHV rejects commas, units, or quoted numbers.
+ */
 export function parseWeight(wgt: string | null): number {
   if (!wgt || !wgt.trim()) {
     throw new Error("Weight is missing");
   }
-  const digits = wgt.replace(/[^\d]/g, "");
+  const digits = wgt.replace(/[^\d]/g, ""); // strip everything except digits
   if (!digits) {
     throw new Error(`Cannot parse weight from "${wgt}"`);
   }
@@ -39,15 +60,31 @@ export function parseWeight(wgt: string | null): number {
   return weight;
 }
 
-/** Map Walmart mode code to SHV equipment type */
-export function mapEquipmentType(mode: string): "Reefer 53'" | "Dry Van 53'" {
+/**
+ * Map Walmart "mode" to SHV "equipment_type".
+ *
+ * Business rule (per your requirements):
+ *   AMBIENT  →  Dry Van 53'   (room-temperature trailer)
+ *   FREEZER  →  Reefer 53'    (refrigerated trailer)
+ */
+export function mapEquipmentType(
+  mode: string
+): "Reefer 53'" | "Dry Van 53'" {
   const normalized = mode.trim().toUpperCase();
-  if (REEFER_MODES.has(normalized) || normalized.includes("REEF") || normalized.includes("FRZ")) {
+
+  if (normalized === "FREEZER") {
     return "Reefer 53'";
   }
+
+  if (normalized === "AMBIENT") {
+    return "Dry Van 53'";
+  }
+
+  // Fallback for unexpected mode values — treat unknown as ambient/dry van
   return "Dry Van 53'";
 }
 
+/** Remove leading/trailing spaces and validate a required text field. */
 function trimField(value: string, fieldName: string): string {
   const trimmed = value.trim();
   if (!trimmed) {
@@ -59,6 +96,10 @@ function trimField(value: string, fieldName: string): string {
   return trimmed;
 }
 
+/**
+ * Convert ONE Walmart tender record into ONE SHV load record.
+ * Each field on the left (Walmart name) maps to the right (SHV name).
+ */
 export function sanitizeLoad(load: WalmartLoad): ShvLoad {
   return {
     load_number: trimField(load.load_no, "load_number"),
@@ -75,11 +116,18 @@ export function sanitizeLoad(load: WalmartLoad): ShvLoad {
   };
 }
 
+/**
+ * Sanitize a batch of Walmart loads.
+ * Loads that fail validation are collected in `errors` so the rest can still proceed.
+ */
 export function sanitizeLoads(loads: WalmartLoad[]): SanitizeResult {
   const sanitized: ShvLoad[] = [];
   const errors: SanitizeResult["errors"] = [];
 
-  for (const load of loads) {
+  // Process in FIFO order before converting
+  const ordered = sortLoadsFifo(loads);
+
+  for (const load of ordered) {
     try {
       sanitized.push(sanitizeLoad(load));
     } catch (err) {
