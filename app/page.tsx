@@ -8,6 +8,7 @@
 
 import Image from "next/image";
 import { useCallback, useState } from "react";
+import { AccordionSection } from "@/app/components/AccordionSection";
 import { ShvLoadCard } from "@/app/components/ShvLoadCard";
 import { WalmartLoadCard } from "@/app/components/WalmartLoadCard";
 import type { FetchResponse, ShvLoad, WalmartLoad } from "@/lib/types";
@@ -17,13 +18,12 @@ type Status = {
   message: string;
 } | null;
 
+/** Which action button stays highlighted until the other is clicked. */
+type ActiveAction = "fetch" | "push" | null;
+
 export default function Home() {
-  /** Raw Walmart records shown after Fetch. */
   const [fetchedLoads, setFetchedLoads] = useState<WalmartLoad[]>([]);
-
-  /** Loads successfully pushed — shown with SHV field names. */
   const [pushedLoads, setPushedLoads] = useState<ShvLoad[]>([]);
-
   const [status, setStatus] = useState<Status>(null);
   const [rejected, setRejected] = useState<
     Array<{ load_number: string; errors: string[] }>
@@ -32,7 +32,18 @@ export default function Home() {
   const [pushing, setPushing] = useState(false);
   const [step, setStep] = useState<1 | 2>(1);
 
+  /** Sticky highlight on the last action button clicked. */
+  const [activeAction, setActiveAction] = useState<ActiveAction>(null);
+
+  /** Accordion open/closed state for each results section. */
+  const [fetchedOpen, setFetchedOpen] = useState(true);
+  const [pushedOpen, setPushedOpen] = useState(false);
+
   const handleFetch = useCallback(async () => {
+    setActiveAction("fetch");
+    setFetchedOpen(true);
+    setPushedOpen(false);
+
     setFetching(true);
     setStatus({
       type: "loading",
@@ -75,6 +86,10 @@ export default function Home() {
       });
       return;
     }
+
+    setActiveAction("push");
+    setFetchedOpen(false);
+    setPushedOpen(true);
 
     setPushing(true);
     setRejected([]);
@@ -139,6 +154,8 @@ export default function Home() {
     }
   }, [fetchedLoads]);
 
+  const showPushedSection = pushing || pushedLoads.length > 0;
+
   return (
     <main className="app">
       <div className="logo-bar">
@@ -173,14 +190,14 @@ export default function Home() {
 
       <div className="actions">
         <button
-          className="btn-fetch"
+          className={`btn-fetch ${activeAction === "fetch" ? "active" : ""}`}
           onClick={handleFetch}
           disabled={fetching || pushing}
         >
           {fetching ? "Fetching…" : "1 · Fetch Loads"}
         </button>
         <button
-          className="btn-push"
+          className={`btn-push ${activeAction === "push" ? "active" : ""}`}
           onClick={handlePush}
           disabled={fetching || pushing || fetchedLoads.length === 0}
         >
@@ -214,14 +231,16 @@ export default function Home() {
       )}
 
       {fetchedLoads.length > 0 && (
-        <section className="loads-section">
-          <h2 className="section-title">
-            Fetched from Walmart ({fetchedLoads.length})
-          </h2>
+        <AccordionSection
+          title="Fetched from Walmart"
+          count={fetchedLoads.length}
+          isOpen={fetchedOpen}
+          onToggle={() => setFetchedOpen((o) => !o)}
+        >
           {fetchedLoads.map((load) => (
             <WalmartLoadCard key={load.load_no} load={load} />
           ))}
-        </section>
+        </AccordionSection>
       )}
 
       {fetchedLoads.length === 0 && !fetching && (
@@ -233,15 +252,22 @@ export default function Home() {
         </section>
       )}
 
-      {pushedLoads.length > 0 && (
-        <section className="loads-section pushed-section">
-          <h2 className="section-title pushed-title">
-            Pushed to SHV ({pushedLoads.length})
-          </h2>
-          {pushedLoads.map((load) => (
-            <ShvLoadCard key={load.load_number} load={load} />
-          ))}
-        </section>
+      {showPushedSection && (
+        <AccordionSection
+          title="Pushed to SHV"
+          count={pushedLoads.length}
+          isOpen={pushedOpen}
+          onToggle={() => setPushedOpen((o) => !o)}
+          variant="pushed"
+        >
+          {pushedLoads.length === 0 && pushing ? (
+            <p className="accordion-loading">Pushing loads…</p>
+          ) : (
+            pushedLoads.map((load) => (
+              <ShvLoadCard key={load.load_number} load={load} />
+            ))
+          )}
+        </AccordionSection>
       )}
     </main>
   );
