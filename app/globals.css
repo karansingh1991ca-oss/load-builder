@@ -247,20 +247,30 @@ button:disabled {
 }
 
 .load-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 0.35rem 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
   font-size: 0.8rem;
 }
 
+.load-row {
+  display: grid;
+  grid-template-columns: 9rem 1fr;
+  gap: 0.75rem;
+  align-items: baseline;
+}
+
 @media (max-width: 400px) {
-  .load-grid {
+  .load-row {
     grid-template-columns: 1fr;
+    gap: 0.15rem;
   }
 }
 
 .load-grid dt {
   color: var(--text-muted);
+  font-family: ui-monospace, monospace;
+  font-size: 0.75rem;
 }
 
 .load-grid dd {

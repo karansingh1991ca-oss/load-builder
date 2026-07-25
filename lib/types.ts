@@ -37,13 +37,11 @@ export interface WalmartResponse {
   loads: WalmartLoad[];
 }
 
-/** Response from our fetch-loads API — sanitized records sorted by load number. */
+/** Response from our fetch-loads API — raw Walmart records sorted by load number. */
 export interface FetchResponse {
   source: string;
   count: number;
-  loads: ShvLoad[];
-  rawLoads: WalmartLoad[];
-  sanitizeErrors: Array<{ load_number: string; errors: string[] }>;
+  loads: WalmartLoad[];
 }
 
 /** A load record in the format SHV TMS expects (after sanitization). */

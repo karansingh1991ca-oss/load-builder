@@ -1,14 +1,10 @@
 /**
  * FETCH-LOADS API ROUTE
- * =====================
- * Called when the user clicks "Fetch Loads".
- * Pulls from Walmart, sorts by load number (lowest first), sanitizes,
- * and returns the SHV-ready records for display.
+ * Returns raw Walmart tenders sorted by increasing load number.
  */
 
 import { NextResponse } from "next/server";
 import { authHeaders, WALMART_API_URL } from "@/lib/config";
-import { sanitizeLoads } from "@/lib/sanitize";
 import { sortLoadsSequential } from "@/lib/sort";
 import type { FetchResponse, WalmartResponse } from "@/lib/types";
 
@@ -32,17 +28,12 @@ export async function GET() {
     }
 
     const result = data as WalmartResponse;
-
-    // Sort by increasing load number, then sanitize for display
     const ordered = sortLoadsSequential(result.loads ?? []);
-    const { sanitized, errors } = sanitizeLoads(ordered);
 
     const response: FetchResponse = {
       source: result.source,
-      count: sanitized.length,
-      loads: sanitized,
-      rawLoads: ordered,
-      sanitizeErrors: errors,
+      count: ordered.length,
+      loads: ordered,
     };
 
     return NextResponse.json(response);
