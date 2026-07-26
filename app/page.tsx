@@ -171,10 +171,36 @@ export default function Home() {
 
       <header>
         <h1>Walmart → SHV Logistics Load Builder</h1>
-        <p>
-          Fetch raw Walmart freight tenders, sanitize them per the SHV rules, and
-          push them into the TMS.
-        </p>
+        <div className="intro">
+          <p className="intro-summary">
+            This app replaces manual copy-paste between the Walmart freight portal
+            and SHV TMS. It pulls your open load tenders from Walmart, converts
+            them into the format SHV expects, and sends them in automatically —
+            one load at a time, in order.
+          </p>
+          <div className="intro-instructions">
+            <p className="intro-label">How to use</p>
+            <ol>
+              <li>
+                Click <strong>Fetch Loads</strong> to pull your open tenders from
+                Walmart.
+              </li>
+              <li>
+                Review the list under <strong>Fetched from Walmart</strong> — click
+                the section header to expand or collapse it.
+              </li>
+              <li>
+                Click <strong>Sanitize &amp; Push</strong> to convert and send each
+                load to SHV. Results appear under <strong>Pushed to SHV</strong> as
+                each one completes.
+              </li>
+              <li>
+                If any load is rejected, check the error message and try again — safe
+                to retry the same load number.
+              </li>
+            </ol>
+          </div>
+        </div>
         <p className="email">Auth: Karansingh1991.ca@gmail.com</p>
       </header>
 
@@ -204,11 +230,6 @@ export default function Home() {
           {pushing ? "Pushing…" : "2 · Sanitize & Push"}
         </button>
       </div>
-
-      <p className="hint">
-        Fetch shows Walmart source columns. Push shows the sanitized SHV API
-        fields sent to the TMS.
-      </p>
 
       {status && (
         <div className={`status-bar ${status.type}`}>{status.message}</div>
