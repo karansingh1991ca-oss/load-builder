@@ -47,6 +47,9 @@ body {
   margin: 0 -1rem 1.5rem;
   padding: 0.75rem 1rem;
   border-bottom: 1px solid #b8cfe0;
+  display: flex;
+  justify-content: center;
+  align-items: center;
 }
 
 .logo {
@@ -54,19 +57,30 @@ body {
   max-width: min(280px, 70vw);
   width: auto;
   display: block;
+  margin: 0 auto;
 }
 
 header {
   margin-bottom: 2rem;
-  text-align: center;
 }
 
-header h1 {
-  font-size: clamp(1.25rem, 4vw, 1.75rem);
+.page-title-wrap {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  width: 100%;
+  padding: 0.25rem 0 1.25rem;
+}
+
+.page-title {
+  font-size: clamp(1.35rem, 5vw, 2rem);
   font-weight: 700;
-  line-height: 1.3;
-  margin-bottom: 0.5rem;
+  line-height: 1.35;
   text-align: center;
+  color: var(--text);
+  max-width: 36rem;
+  width: 100%;
+  margin: 0 auto;
 }
 
 header p {
@@ -78,6 +92,7 @@ header .email {
   color: var(--accent);
   font-size: 0.85rem;
   margin-top: 1rem;
+  text-align: center;
 }
 
 .workspace {
@@ -96,7 +111,8 @@ header .email {
   border: 1px solid var(--border);
   border-radius: var(--radius);
   padding: 1rem 1.125rem;
-  margin-top: 0.75rem;
+  margin-top: 0;
+  text-align: left;
 }
 
 .intro-summary {
