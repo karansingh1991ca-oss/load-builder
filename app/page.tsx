@@ -12,6 +12,7 @@ import { AccordionSection } from "@/app/components/AccordionSection";
 import { ShvLoadCard } from "@/app/components/ShvLoadCard";
 import { WalmartLoadCard } from "@/app/components/WalmartLoadCard";
 import type { FetchResponse, ShvLoad, WalmartLoad } from "@/lib/types";
+import { scrollToElementDelayed } from "@/lib/scroll";
 
 type Status = {
   type: "loading" | "success" | "error" | "warning";
@@ -39,11 +40,11 @@ export default function Home() {
   const [fetchedOpen, setFetchedOpen] = useState(true);
   const [pushedOpen, setPushedOpen] = useState(false);
 
-  /** Scroll target — everything below the auth line (steps, buttons, results). */
+  /** Scroll anchor placed directly below the auth line. */
   const workspaceRef = useRef<HTMLDivElement>(null);
 
   const scrollToWorkspace = useCallback(() => {
-    workspaceRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    scrollToElementDelayed(workspaceRef.current, 200);
   }, []);
 
   const handleFetch = useCallback(async () => {
@@ -83,6 +84,7 @@ export default function Home() {
       });
     } finally {
       setFetching(false);
+      scrollToWorkspace();
     }
   }, [scrollToWorkspace]);
 
@@ -161,6 +163,7 @@ export default function Home() {
       });
     } finally {
       setPushing(false);
+      scrollToWorkspace();
     }
   }, [fetchedLoads, scrollToWorkspace]);
 
@@ -214,7 +217,15 @@ export default function Home() {
         <p className="email">Auth: Karansingh1991.ca@gmail.com</p>
       </header>
 
-      <div ref={workspaceRef} className="workspace">
+      <div
+        ref={workspaceRef}
+        id="workspace-anchor"
+        className="scroll-anchor"
+        tabIndex={-1}
+        aria-hidden="true"
+      />
+
+      <div className="workspace">
       <div className="steps">
         <span className={`step ${step >= 1 ? "active" : ""}`}>
           <span className="step-num">1</span> Fetch loads
