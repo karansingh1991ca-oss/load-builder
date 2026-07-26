@@ -9,7 +9,7 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Load Builder — Walmart → SHV Logistics",
+  title: "Load Builder : Walmart to SHV Logistics",
   description: "Fetch Walmart freight tenders, sanitize, and push to SHV TMS",
 };
 

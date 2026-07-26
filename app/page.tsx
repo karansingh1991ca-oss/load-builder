@@ -183,7 +183,7 @@ export default function Home() {
       </div>
 
       <header>
-        <h1>Walmart → SHV Logistics Load Builder</h1>
+        <h1>Load Builder : Walmart to SHV Logistics</h1>
         <div className="intro">
           <p className="intro-summary">
             This app replaces manual copy-paste between the Walmart freight portal
