@@ -7,7 +7,7 @@
  */
 
 import Image from "next/image";
-import { useCallback, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import { AccordionSection } from "@/app/components/AccordionSection";
 import { ShvLoadCard } from "@/app/components/ShvLoadCard";
 import { WalmartLoadCard } from "@/app/components/WalmartLoadCard";
@@ -39,7 +39,15 @@ export default function Home() {
   const [fetchedOpen, setFetchedOpen] = useState(true);
   const [pushedOpen, setPushedOpen] = useState(false);
 
+  /** Scroll target — everything below the auth line (steps, buttons, results). */
+  const workspaceRef = useRef<HTMLDivElement>(null);
+
+  const scrollToWorkspace = useCallback(() => {
+    workspaceRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }, []);
+
   const handleFetch = useCallback(async () => {
+    scrollToWorkspace();
     setActiveAction("fetch");
     setFetchedOpen(true);
     setPushedOpen(false);
@@ -76,9 +84,11 @@ export default function Home() {
     } finally {
       setFetching(false);
     }
-  }, []);
+  }, [scrollToWorkspace]);
 
   const handlePush = useCallback(async () => {
+    scrollToWorkspace();
+
     if (fetchedLoads.length === 0) {
       setStatus({
         type: "warning",
@@ -152,7 +162,7 @@ export default function Home() {
     } finally {
       setPushing(false);
     }
-  }, [fetchedLoads]);
+  }, [fetchedLoads, scrollToWorkspace]);
 
   const showPushedSection = pushing || pushedLoads.length > 0;
 
@@ -204,6 +214,7 @@ export default function Home() {
         <p className="email">Auth: Karansingh1991.ca@gmail.com</p>
       </header>
 
+      <div ref={workspaceRef} className="workspace">
       <div className="steps">
         <span className={`step ${step >= 1 ? "active" : ""}`}>
           <span className="step-num">1</span> Fetch loads
@@ -290,6 +301,7 @@ export default function Home() {
           )}
         </AccordionSection>
       )}
+      </div>
     </main>
   );
 }
