@@ -306,12 +306,6 @@ button:disabled {
   display: none;
 }
 
-.hint {
-  color: var(--text-muted);
-  font-size: 0.875rem;
-  margin-bottom: 1.5rem;
-}
-
 .status-bar {
   padding: 0.75rem 1rem;
   border-radius: var(--radius);
